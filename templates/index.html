@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NGINX Hackathon</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+</head>
+
+<body>
+
+    <section id="sidebar">
+        <form method="POST" action="{{ url_for('index') }}">
+            {{ form.hidden_tag() }}
+            <div>
+                {{ form.ip_address.label }} {{ form.ip_address(size=20) }}
+            </div>
+            <div>
+                {{ form.status_code.label }} {{ form.status_code() }}
+            </div>
+            <div>
+                {{ form.method.label }} {{ form.method() }}
+            </div>
+            <div>
+                {{ form.start_time.label }} {{ form.start_time() }}
+            </div>
+            <div>
+                {{ form.end_time.label }} {{ form.end_time() }}
+            </div>
+            <div>
+                {{ form.submit() }}
+            </div>
+        </form>
+        <button id="downloadLogBtn" class="download-btn">Download Log Summary</button>
+
+        <div id="downloadModal" class="modal">
+            <div class="modal-content">
+                <button id="closeModalBtn" class="close-btn" title="Close">&times;</button>
+                <h2>Download Summary Report</h2>
+                <p>You can download your <b>log_summary.csv</b> file below.</p>
+                <a href="{{ url_for('static', filename='log_summary.csv') }}" download class="download-link">
+                    <i class="fa fa-download"></i> Download CSV
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <section id="headerBar">
+        <header>
+            <h1>Metrics Dashboard</h1>
+        </header>
+
+        <section id="chartGrid">
+
+            <div id="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>IP</th>
+                            <th>Timestamp</th>
+                            <th>Response Code</th>
+                            <th>Bytes sent</th>
+                            <th>User Agent</th>
+                            <th>Request</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in log_entries %}
+                        {% if loop.index0 % 2 == 0 %}
+                        <tr style="background-color: #4B5563;">
+                            <td>{{ entry['id'] }}</td>
+                            <td>{{ entry['ip_address'] }}</td>
+                            <td>{{ entry['timestamp'] }}</td>
+                            <td>{{ entry['status_code'] }}</td>
+                            <td>{{ entry['bytes_sent'] }}</td>
+                            <td>{{ entry['user_agent'] }}</td>
+                            <td>{{ entry['request'] }}</td>
+                        </tr>
+                        {% else %}
+                        <tr style="background-color: #6B7280;">
+                            <td>{{ entry['id'] }}</td>
+                            <td>{{ entry['ip_address'] }}</td>
+                            <td>{{ entry['timestamp'] }}</td>
+                            <td>{{ entry['status_code'] }}</td>
+                            <td>{{ entry['bytes_sent'] }}</td>
+                            <td>{{ entry['user_agent'] }}</td>
+                            <td>{{ entry['request'] }}</td>
+                        </tr>
+                        {% endif %}
+                        {% else %}
+                        <tr>
+                            <td id="no_logs" colspan="7">No log entries found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="map"></div>
+
+            <div class="stats-container">
+                <p>Total Requests: {{ total_requests }}</p>
+                <p>Average Bytes Sent: {{ avg_bytes|round(2) }}</p>
+                <p>Most Common Status Code: {{ most_common_status }}</p>
+                <p>Most Common IP: {{ most_common_ip }}</p>
+                <p>Unique IPs: {{ unique_ips_count }}</p>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="requestChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="statusChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="errorChart"></canvas>
+            </div>
+
+            <div id="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th colspan="1000" style="text-align: left;">Request Concentration from IPs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <th style="color: red;">High Concentration</th>
+                            {% for ip in high_conc_display %}
+                            <td>{{ip}}</td>
+                            {% endfor %}
+                        </tr>
+
+                        <tr>
+                            <th style="color: yellow;">Medium Concentration</th>
+                            {% for ip in mid_conc_display %}
+                            <td>{{ip}}</td>
+                            {% endfor %}
+                        </tr>
+
+                        <tr>
+                            <th style="color: lime;">Low Concentration</th>
+                            {% for ip in low_conc_display %}
+                            <td>{{ip}}</td>
+                            {% endfor %}
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+<div id="table-container">
+    <h2>Webscraper/Bot Activity <span style="font-size:1rem; color:#22c55e;">({{ webscraper_entries|length }})</span></h2>
+    <table class="bot-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>IP</th>
+                <th>Timestamp</th>
+                <th>User Agent</th>
+                <th>Request</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in webscraper_entries %}
+            <tr>
+                <td>{{ entry['id'] }}</td>
+                <td>{{ entry['ip_address'] }}</td>
+                <td>{{ entry['timestamp'] }}</td>
+                <td>{{ entry['user_agent'] }}</td>
+                <td>{{ entry['request'] }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5">No webscraper or chatbot activity found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+
+        </section>
+    </section>
+    <button id="backToTop"
+        style="display:none; position:fixed; bottom:40px; right:40px; z-index:1000; background:var(--accent); color:#fff; border:none; border-radius:50%; width:56px; height:56px; font-size:2rem; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+        <i class="fa-solid fa-hand-point-up"></i>
+    </button>
+
+    <script>
+        let code_frequencies = JSON.parse('{{ code_frequencies|tojson|safe }}');
+        let timestamp_logs = JSON.parse('{{ timestamp_logs|tojson|safe }}');
+        let error_hour_labels = JSON.parse('{{ error_hour_labels|tojson|safe }}');
+        let error_hour_data = JSON.parse('{{ error_hour_data|tojson|safe }}');
+        let ips = JSON.parse('{{ ips|tojson|safe }}');
+        let unique_ips_location = JSON.parse('{{ unique_ips_location|tojson|safe }}');
+        let high_conc = JSON.parse('{{ high_conc|tojson|safe }}');
+        let mid_conc = JSON.parse('{{ mid_conc|tojson|safe }}');
+        let low_conc = JSON.parse('{{ low_conc|tojson|safe }}');
+        let high_conc_display = JSON.parse('{{ high_conc_display|tojson|safe }}');
+        let mid_conc_display = JSON.parse('{{ mid_conc_display|tojson|safe }}');
+        let low_conc_display = JSON.parse('{{ low_conc_display|tojson|safe }}');
+    </script>
+
+</body>
+
+</html>
